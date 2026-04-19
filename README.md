@@ -31,8 +31,8 @@ This repository contains infrastructure-as-code and source code for Jenkins setu
 |   |-- seed/
 |   |   `-- seed.Jenkinsfile
 |   `-- templates/
-|       |-- multibranch-job.groovy
-|       `-- pipeline-job-devops-test.groovy
+|       |-- multibranch_job.groovy
+|       `-- pipeline_job_devops_test.groovy
 |-- pipelines/
 |   |-- apps/
 |   |   |-- devops-test-docker-general-agent.Jenkinsfile
