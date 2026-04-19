@@ -1,0 +1,3 @@
+environment: prod
+jenkins_url: http://jenkins-prod.local
+folder_prefix: PROD

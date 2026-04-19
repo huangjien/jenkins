@@ -1,0 +1,15 @@
+jenkins:
+  systemMessage: "Jenkins managed by Configuration as Code"
+  numExecutors: 2
+  mode: NORMAL
+  scmCheckoutRetryCount: 0
+  remotingSecurity:
+    enabled: true
+
+unclassified:
+  location:
+    url: "http://localhost:8888/"
+
+# NOTE:
+# - Live Jenkins currently uses GitHub OAuth + Matrix Auth.
+# - Keep OAuth client ID/secret out of git and inject via secrets/ENV at deploy time.
