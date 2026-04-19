@@ -7,8 +7,6 @@ jenkins:
     enabled: true
 
 unclassified:
-  globalJobDslSecurityConfiguration:
-    useScriptSecurity: false
   location:
     url: "http://localhost:8888/"
 
