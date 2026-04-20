@@ -1,5 +1,5 @@
 pipelineJob('Build-Docker-General-Agent-Image') {
-  description('Builds jenkins/jenkins-agent-image/general-agent.Dockerfile with version args controlled by Jenkins parameters.')
+  description('Builds jenkins/jenkins-agent-image/general-agent.Dockerfile and publishes huangjien/jenkins image using Jenkins parameters.')
 
   definition {
     cpsScm {

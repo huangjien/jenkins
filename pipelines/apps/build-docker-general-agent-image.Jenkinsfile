@@ -5,7 +5,7 @@ pipeline {
     string(name: 'JENKINS_AGENT_TAG', defaultValue: 'latest-jdk25', description: 'Base tag for jenkins/inbound-agent')
     string(name: 'NODE_MAJOR', defaultValue: '24', description: 'NodeSource major version')
     string(name: 'PNPM_VERSION', defaultValue: '10.33.0', description: 'pnpm version prepared by corepack')
-    string(name: 'IMAGE_REPO', defaultValue: 'jenkins-general-agent', description: 'Output Docker image repository/name')
+    string(name: 'IMAGE_REPO', defaultValue: 'huangjien/jenkins', description: 'Output Docker image repository/name')
     string(name: 'IMAGE_TAG', defaultValue: 'dev', description: 'Output Docker image tag')
     booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image after successful build')
   }
@@ -44,10 +44,14 @@ pipeline {
         expression { return params.PUSH_IMAGE }
       }
       steps {
-        sh '''
-          set -eux
-          docker push "${FULL_IMAGE_NAME}"
-        '''
+        withCredentials([string(credentialsId: 'docker_token', variable: 'DOCKER_TOKEN')]) {
+          sh '''
+            set -eux
+            printf '%s' "${DOCKER_TOKEN}" | docker login -u "huangjien" --password-stdin
+            docker push "${FULL_IMAGE_NAME}"
+            docker logout
+          '''
+        }
       }
     }
   }

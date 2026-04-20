@@ -1,5 +1,5 @@
 pipelineJob('DevOps-Test-Docker-General-Agent') {
-  description('Repo-managed pipeline job for docker agent smoke checks.')
+  description('Repo-managed pipeline job for docker agent smoke checks on label docker (Docker cloud image: huangjien/jenkins:latest-jdk25).')
 
   definition {
     cpsScm {

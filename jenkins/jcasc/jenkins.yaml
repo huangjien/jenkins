@@ -5,6 +5,24 @@ jenkins:
   scmCheckoutRetryCount: 0
   remotingSecurity:
     enabled: true
+  clouds:
+    - docker:
+        name: "local-docker"
+        containerCapStr: "10"
+        dockerApi:
+          dockerHost:
+            uri: "unix:///var/run/docker.sock"
+        templates:
+          - labelString: "docker"
+            mode: EXCLUSIVE
+            remoteFs: "/home/jenkins/agent"
+            pullStrategy: PULL_ALWAYS
+            connector:
+              attach:
+                user: "jenkins"
+            dockerTemplateBase:
+              image: "huangjien/jenkins:latest-jdk25"
+              pullCredentialsId: "docker_token"
 
 unclassified:
   location:
