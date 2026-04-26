@@ -1,4 +1,4 @@
-pipelineJob('WST-CI') {
+pipelineJob('WST-CI-Pipeline') {
   description('Repo-managed pipeline job for WST using the repository root Jenkinsfile on agent label general-agent.')
 
   definition {
