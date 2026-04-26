@@ -1,6 +1,10 @@
 pipelineJob('WST-CI-Pipeline') {
   description('Repo-managed pipeline job for WST using the repository root Jenkinsfile on agent label general-agent.')
 
+  triggers {
+    scm('H/5 * * * *')
+  }
+
   definition {
     cpsScm {
       scm {
