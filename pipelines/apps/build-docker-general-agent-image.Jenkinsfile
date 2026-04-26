@@ -14,6 +14,9 @@ pipeline {
     DOCKERFILE_PATH = 'jenkins/jenkins-agent-image/general-agent.Dockerfile'
     BUILD_CONTEXT = 'jenkins'
     FULL_IMAGE_NAME = "${params.IMAGE_REPO}:${params.IMAGE_TAG}"
+    DOCKER_TOKEN = credentials('docker_token')
+    DOCKER_USERNAME = "${DOCKER_TOKEN_USR}"
+    DOCKER_PASSWORD = "${DOCKER_TOKEN_PSW}"
   }
 
   stages {
@@ -44,14 +47,14 @@ pipeline {
         expression { return params.PUSH_IMAGE }
       }
       steps {
-        withCredentials([string(credentialsId: 'docker_token', variable: 'DOCKER_TOKEN')]) {
-          sh '''
-            set -eux
-            printf '%s' "${DOCKER_TOKEN}" | docker login -u "huangjien" --password-stdin
-            docker push "${FULL_IMAGE_NAME}"
-            docker logout
-          '''
-        }
+        
+        sh '''
+          set -eux
+          printf '%s' "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+          docker push "${FULL_IMAGE_NAME}"
+          docker logout
+        '''
+        
       }
     }
   }

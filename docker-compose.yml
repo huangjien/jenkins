@@ -1,0 +1,19 @@
+services:
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    image: jenkins-custom:latest
+    container_name: jenkins
+    privileged: true
+    user: root
+    ports:
+      - "8888:8080"
+      - "50000:50000"
+    environment:
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs/jenkins.yaml
+    volumes:
+      - ${JENKINS_HOME_BIND:-/Volumes/Windows/Jenkins/data}:/var/jenkins_home
+      - ./jenkins/jcasc/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

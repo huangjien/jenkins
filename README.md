@@ -57,3 +57,4 @@ This repository contains infrastructure-as-code and source code for Jenkins setu
 
 - Active local Jenkins endpoint: `http://localhost:8888`
 - Sync checklist: `docs/runbooks/local-jenkins-sync.md`
+- Redeploy modes: `docs/runbooks/redeploy-modes.md`

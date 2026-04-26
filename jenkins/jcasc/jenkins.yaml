@@ -8,7 +8,7 @@ jenkins:
   clouds:
     - docker:
         name: "local-docker"
-        containerCapStr: "10"
+        containerCap: 10
         dockerApi:
           dockerHost:
             uri: "unix:///var/run/docker.sock"
@@ -16,13 +16,16 @@ jenkins:
           - labelString: "docker"
             mode: EXCLUSIVE
             remoteFs: "/home/jenkins/agent"
-            pullStrategy: PULL_ALWAYS
+            pullStrategy: PULL_NEVER
             connector:
               attach:
-                user: "jenkins"
+                user: "root"
             dockerTemplateBase:
-              image: "huangjien/jenkins:latest-jdk25"
+              image: "huangjien/general-agent:latest"
               pullCredentialsId: "docker_token"
+              user: "root"
+              mounts:
+                - "type=bind,source=/var/run/docker.sock,destination=/var/run/docker.sock"
 
 unclassified:
   location:

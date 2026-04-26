@@ -1,0 +1,4 @@
+/.jenkins_home/
+
+# macOS
+.DS_Store
