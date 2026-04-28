@@ -17,6 +17,7 @@ jenkins:
             mode: EXCLUSIVE
             remoteFs: "/home/jenkins/agent"
             pullStrategy: PULL_NEVER
+            removeVolumes: true
             connector:
               attach:
                 user: "root"

@@ -20,6 +20,7 @@ docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
 docker exec jenkins sh -lc 'cat /var/jenkins_home/config.xml | sed -n "1,140p"'
 docker exec jenkins sh -lc 'cat /var/jenkins_home/jenkins.model.JenkinsLocationConfiguration.xml'
 docker exec jenkins sh -lc 'ls -1 /var/jenkins_home/jobs'
+docker exec jenkins sh -lc 'grep -n "removeVolumes" /var/jenkins_home/config.xml'
 ```
 
 ## Verify API Access
@@ -42,3 +43,20 @@ curl -sS -u huangjien:<api-token> 'http://localhost:8888/pluginManager/api/json?
 - API access to `/api/json` requires valid Jenkins user + API token.
 - Validated user in this environment: `huangjien`.
 - If a token fails, generate a new API token from the Jenkins user profile and retry.
+
+## Docker Agent Volume Cleanup
+
+- Root cause: Docker cloud agents create anonymous volumes; if `removeVolumes` is false, they remain after agent container removal.
+- Desired config: set `removeVolumes: true` in `jenkins/jcasc/jenkins.yaml` Docker template.
+- Apply config by redeploying Jenkins, then verify `config.xml` contains `<removeVolumes>true</removeVolumes>`.
+- One-time cleanup for leaked volumes:
+
+```bash
+docker volume prune -f
+```
+
+- Safer targeted cleanup (only dangling volumes):
+
+```bash
+docker volume ls -qf dangling=true | xargs -r docker volume rm
+```
