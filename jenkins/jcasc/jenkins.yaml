@@ -16,7 +16,8 @@ jenkins:
           - labelString: "docker"
             mode: EXCLUSIVE
             remoteFs: "/home/jenkins/agent"
-            pullStrategy: PULL_NEVER
+            pullStrategy: PULL_LATEST
+            pullTimeout: 300
             removeVolumes: true
             connector:
               attach:
