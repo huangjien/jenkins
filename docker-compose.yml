@@ -12,6 +12,7 @@ services:
       - "50000:50000"
     environment:
       CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs/jenkins.yaml
+      EXTERNAL_URL: ${EXTERNAL_URL:-http://imac.tail94eaca.ts.net:8888/}
     volumes:
       - ${JENKINS_HOME_BIND:-/Volumes/Windows/Jenkins/data}:/var/jenkins_home
       - ./jenkins/jcasc/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro

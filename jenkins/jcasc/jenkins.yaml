@@ -32,7 +32,7 @@ jenkins:
 
 unclassified:
   location:
-    url: "http://imac.tail94eaca.ts.net:8888/"
+    url: "${EXTERNAL_URL:-http://imac.tail94eaca.ts.net:8888/}"
 
 # NOTE:
 # - Live Jenkins currently uses GitHub OAuth + Matrix Auth.
