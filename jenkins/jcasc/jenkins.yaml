@@ -1,3 +1,7 @@
+# Import plugin version locks (must be at top level, before other keys)
+includes:
+  - file: plugins.yaml
+
 jenkins:
   systemMessage: "Jenkins managed by Configuration as Code"
   authorizationStrategy: loggedInUsersCanDoAnything
@@ -32,7 +36,7 @@ jenkins:
 
 unclassified:
   location:
-    url: "http://localhost:8888/"
+    url: "http://imac.tail94eaca.ts.net:8888/"
 
 # NOTE:
 # - Live Jenkins currently uses GitHub OAuth + Matrix Auth.
