@@ -83,7 +83,7 @@ pipeline {
             pnpm perf:ci
           '''
           catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-            sh 'CHROME_PATH=/usr/bin/chromium pnpm lhci:collect'
+            sh 'CHROME_PATH=/usr/bin/chromium CHROME_FLAGS="--no-sandbox --disable-dev-shm-usage" pnpm lhci:collect'
           }
           catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
             sh 'pnpm lhci:assert'
