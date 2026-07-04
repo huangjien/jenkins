@@ -69,7 +69,7 @@ pipeline {
         dir('website') {
           sh '''
             set -eux
-            apt-get update && apt-get install -y procps
+            apt-get update && apt-get install -y procps chromium
             corepack enable
             corepack prepare pnpm@10.33.0 --activate
             pnpm install --color=true
