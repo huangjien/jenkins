@@ -37,15 +37,16 @@ pipeline {
           }
 
           env.WEBSITE_HEAD_SHA = headOutput.tokenize()[0]
+          def headSha = env.WEBSITE_HEAD_SHA
           def markerFile = '.website_last_built_sha'
           def lastBuiltSha = fileExists(markerFile) ? readFile(markerFile).trim() : ''
 
-          if (lastBuiltSha && lastBuiltSha == env.WEBSITE_HEAD_SHA && !params.FORCE_BUILD) {
+          if (lastBuiltSha && lastBuiltSha == headSha && !params.FORCE_BUILD) {
             env.SKIP_PIPELINE = 'true'
-            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${env.WEBSITE_HEAD_SHA.take(8)})"
+            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${headSha.take(8)})"
             echo currentBuild.description
           } else {
-            echo "Detected new commit on ${env.WEBSITE_BRANCH}: ${env.WEBSITE_HEAD_SHA.take(8)}"
+            echo "Detected new commit on ${env.WEBSITE_BRANCH}: ${headSha.take(8)}"
           }
         }
       }
