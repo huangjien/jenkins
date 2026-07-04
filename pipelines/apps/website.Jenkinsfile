@@ -12,6 +12,7 @@ pipeline {
 
   parameters {
     booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Run pipeline even if main has no new commit.')
+    booleanParam(name: 'RUN_CD', defaultValue: false, description: 'Run deployment stages after CI passes.')
   }
 
   environment {
@@ -91,7 +92,12 @@ pipeline {
     }
 
     stage('Deploy') {
-      when { expression { env.SKIP_PIPELINE != 'true' } }
+      when { 
+        allOf {
+          expression { env.SKIP_PIPELINE != 'true' }
+          expression { params.RUN_CD == true }
+        }
+      }
       steps {
         dir('website') {
           withCredentials([
