@@ -83,7 +83,7 @@ pipeline {
             pnpm perf:ci
           '''
           catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-            sh 'pnpm lhci:collect'
+            sh 'CHROME_PATH=/usr/bin/chromium pnpm lhci:collect'
           }
           catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
             sh 'pnpm lhci:assert'
