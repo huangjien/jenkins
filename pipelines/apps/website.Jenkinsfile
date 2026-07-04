@@ -36,8 +36,8 @@ pipeline {
             error("Could not resolve ${env.WEBSITE_REPO} ${env.WEBSITE_BRANCH}")
           }
 
-          env.WEBSITE_HEAD_SHA = headOutput.tokenize()[0]
-          def headSha = env.WEBSITE_HEAD_SHA
+          def headSha = headOutput.tokenize()[0]
+          env.WEBSITE_HEAD_SHA = headSha
           def markerFile = '.website_last_built_sha'
           def lastBuiltSha = fileExists(markerFile) ? readFile(markerFile).trim() : ''
 
