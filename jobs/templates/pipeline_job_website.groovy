@@ -1,5 +1,5 @@
-pipelineJob('Website-CI-Pipeline') {
-  description('Repo-managed CI/CD pipeline for website. Polls GitHub main branch every 5 minutes and deploys on new commits.')
+pipelineJob('website-ci-cd') {
+  description('Repo-managed CI/CD pipeline for website. Seed updates replace local inline config and run on the docker cloud agent.')
 
   definition {
     cpsScm {
