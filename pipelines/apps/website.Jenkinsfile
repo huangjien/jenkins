@@ -8,8 +8,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
 
-  triggers { cron('H/5 * * * *') }
-
   parameters {
     booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Run pipeline even if main has no new commit.')
     booleanParam(name: 'RUN_CD', defaultValue: false, description: 'Run deployment stages after CI passes.')
