@@ -12,9 +12,9 @@ pipeline {
       steps {
         jobDsl(
           targets: 'jobs/templates/*.groovy',
-          sandbox: false,
-          removedJobAction: 'IGNORE',
-          removedViewAction: 'IGNORE'
+          sandbox: true,
+          removedJobAction: 'DELETE',
+          removedViewAction: 'DELETE'
         )
       }
     }

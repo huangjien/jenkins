@@ -13,6 +13,12 @@ services:
     environment:
       CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs/jenkins.yaml
       EXTERNAL_URL: ${EXTERNAL_URL:-http://imac.tail94eaca.ts.net:8888/}
+      GITHUB_WEB_URI: ${GITHUB_WEB_URI:-https://github.com}
+      GITHUB_API_URI: ${GITHUB_API_URI:-https://api.github.com}
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-huangjien}
+      JENKINS_DEVELOPER_GROUP: ${JENKINS_DEVELOPER_GROUP:-authenticated}
     volumes:
       - ${JENKINS_HOME_BIND:-/Volumes/Windows/Jenkins/data}:/var/jenkins_home
       - ./jenkins/jcasc/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro

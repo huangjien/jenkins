@@ -1,6 +1,29 @@
 jenkins:
   systemMessage: "Jenkins managed by Configuration as Code"
-  authorizationStrategy: loggedInUsersCanDoAnything
+  securityRealm:
+    github:
+      githubWebUri: "${GITHUB_WEB_URI:-https://github.com}"
+      githubApiUri: "${GITHUB_API_URI:-https://api.github.com}"
+      clientID: "${GITHUB_OAUTH_CLIENT_ID}"
+      clientSecret: "${GITHUB_OAUTH_CLIENT_SECRET}"
+      oauthScopes: "read:org,user:email"
+  authorizationStrategy:
+    globalMatrix:
+      entries:
+        - user:
+            name: "${JENKINS_ADMIN_USER:-huangjien}"
+            permissions:
+              - "Overall/Administer"
+        - group:
+            name: "${JENKINS_DEVELOPER_GROUP:-authenticated}"
+            permissions:
+              - "Overall/Read"
+              - "Job/Build"
+              - "Job/Cancel"
+              - "Job/Discover"
+              - "Job/Read"
+              - "Job/Workspace"
+              - "View/Read"
   numExecutors: 2
   mode: NORMAL
   scmCheckoutRetryCount: 0
@@ -35,5 +58,5 @@ unclassified:
     url: "${EXTERNAL_URL:-http://imac.tail94eaca.ts.net:8888/}"
 
 # NOTE:
-# - Live Jenkins currently uses GitHub OAuth + Matrix Auth.
-# - Keep OAuth client ID/secret out of git and inject via secrets/ENV at deploy time.
+# - Keep OAuth client ID/secret out of git and inject them at deploy time.
+# - JENKINS_DEVELOPER_GROUP may be `authenticated` or a GitHub org/team recognized by github-oauth.

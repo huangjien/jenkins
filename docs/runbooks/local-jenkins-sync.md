@@ -6,7 +6,7 @@ Use this runbook to compare the running local Jenkins container and this reposit
 
 ## Current Live Snapshot (2026-04-19)
 
-- Jenkins URL: `http://localhost:8888` (internally configured as `http://100.76.134.113:8888/`)
+- Jenkins URL: `http://localhost:8888`
 - Jenkins version: `2.555.1`
 - Security: enabled (`GitHub OAuth` + `Matrix Authorization`)
 - Executors: `2`
@@ -21,6 +21,7 @@ docker exec jenkins sh -lc 'cat /var/jenkins_home/config.xml | sed -n "1,140p"'
 docker exec jenkins sh -lc 'cat /var/jenkins_home/jenkins.model.JenkinsLocationConfiguration.xml'
 docker exec jenkins sh -lc 'ls -1 /var/jenkins_home/jobs'
 docker exec jenkins sh -lc 'grep -n "removeVolumes" /var/jenkins_home/config.xml'
+docker exec jenkins sh -lc 'grep -n "authorizationStrategy\\|securityRealm" /var/jenkins_home/config.xml'
 ```
 
 ## Verify API Access
@@ -37,18 +38,26 @@ curl -sS -u huangjien:<api-token> 'http://localhost:8888/pluginManager/api/json?
 2. Keep `jenkins/plugins.txt` aligned with plugin versions used in the live instance.
 3. Never commit secrets (OAuth client secret, tokens, passwords).
 4. Move UI-only jobs into repo (`jobs/` + `pipelines/`) and generate through seed jobs.
+5. Update docs in the same PR when job templates, auth settings, or pipeline behavior change.
 
 ## Notes About Auth
 
 - API access to `/api/json` requires valid Jenkins user + API token.
 - Validated user in this environment: `huangjien`.
 - If a token fails, generate a new API token from the Jenkins user profile and retry.
+- GitHub OAuth settings are now expected from deploy-time environment variables:
+  - `GITHUB_OAUTH_CLIENT_ID`
+  - `GITHUB_OAUTH_CLIENT_SECRET`
+  - `JENKINS_ADMIN_USER`
+  - `JENKINS_DEVELOPER_GROUP`
+- `JENKINS_DEVELOPER_GROUP` can stay as `authenticated` or be narrowed to a GitHub org/team SID later.
 
 ## Docker Agent Volume Cleanup
 
 - Root cause: Docker cloud agents create anonymous volumes; if `removeVolumes` is false, they remain after agent container removal.
 - Desired config: set `removeVolumes: true` in `jenkins/jcasc/jenkins.yaml` Docker template.
 - Apply config by redeploying Jenkins, then verify `config.xml` contains `<removeVolumes>true</removeVolumes>`.
+- Because agent workspaces are ephemeral, pipelines that need cross-build state must use durable Jenkins metadata rather than workspace files.
 - One-time cleanup for leaked volumes:
 
 ```bash
@@ -60,3 +69,10 @@ docker volume prune -f
 ```bash
 docker volume ls -qf dangling=true | xargs -r docker volume rm
 ```
+
+## Plugin Update Workflow
+
+1. Pin the desired plugin version in `jenkins/plugins.txt`.
+2. Rebuild Jenkins locally with `scripts/redeploy-jenkins-local.sh`.
+3. Verify Jenkins starts and `pluginManager/api/json?depth=1` reports the expected plugin versions.
+4. Update docs in the same PR if plugin changes affect auth, job generation, or pipeline behavior.

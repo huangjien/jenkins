@@ -37,14 +37,16 @@ pipeline {
 
           def headSha = headOutput.tokenize()[0]
           env.WEBSITE_HEAD_SHA = headSha
-          def markerFile = '.website_last_built_sha'
-          def lastBuiltSha = fileExists(markerFile) ? readFile(markerFile).trim() : ''
+          def previousDescription = currentBuild.previousSuccessfulBuild?.description ?: ''
+          def previousShaMatch = previousDescription =~ /\[website-sha:([0-9a-f]{40})\]/
+          def lastBuiltSha = previousShaMatch ? previousShaMatch[0][1] : ''
 
           if (lastBuiltSha && lastBuiltSha == headSha && !params.FORCE_BUILD) {
             env.SKIP_PIPELINE = 'true'
-            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${headSha.take(8)})"
+            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${headSha.take(8)}) [website-sha:${headSha}]"
             echo currentBuild.description
           } else {
+            currentBuild.description = "Queued ${env.WEBSITE_BRANCH} (${headSha.take(8)}) [website-sha:${headSha}]"
             echo "Detected new commit on ${env.WEBSITE_BRANCH}: ${headSha.take(8)}"
           }
         }
@@ -159,8 +161,9 @@ pipeline {
   post {
     success {
       script {
-        if (env.SKIP_PIPELINE != 'true' && env.WEBSITE_HEAD_SHA?.trim()) {
-          writeFile file: '.website_last_built_sha', text: "${env.WEBSITE_HEAD_SHA}\n"
+        if (env.WEBSITE_HEAD_SHA?.trim()) {
+          def statusPrefix = env.SKIP_PIPELINE == 'true' ? 'No changes on' : 'Built'
+          currentBuild.description = "${statusPrefix} ${env.WEBSITE_BRANCH} (${env.WEBSITE_HEAD_SHA.take(8)}) [website-sha:${env.WEBSITE_HEAD_SHA}]"
         }
       }
     }
