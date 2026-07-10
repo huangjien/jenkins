@@ -42,6 +42,7 @@ Replace broad authenticated-user admin access with explicit, least-privilege aut
 - [x] Externalize any OAuth secrets and other auth-sensitive values through environment variables or credentials injection.
 - [x] Document the auth model and secret injection requirements in a runbook.
 - [ ] Redeploy local Jenkins with the new JCasC config.
+- [x] Redeploy local Jenkins with the new JCasC config.
 - [ ] Validate that:
   - admin users retain controller management access;
   - non-admin users cannot manage credentials, plugins, or system configuration;
@@ -160,8 +161,8 @@ Remove avoidable nondeterminism from Jenkins image builds.
 ### Tasks
 
 - [x] Pin the `rebuild` plugin version in `jenkins/plugins.txt`.
-- [ ] Review whether any other dependency versions are floating indirectly and should be captured more explicitly.
-- [ ] Rebuild the Jenkins controller image locally and confirm plugin resolution succeeds.
+- [x] Review whether any other dependency versions are floating indirectly and should be captured more explicitly.
+- [x] Rebuild the Jenkins controller image locally and confirm plugin resolution succeeds.
 - [ ] Record the expected plugin update workflow in docs:
   - [x] how to bump versions;
   - [x] how to validate compatibility;
@@ -183,12 +184,12 @@ Remove avoidable nondeterminism from Jenkins image builds.
 
 ## Validation Checklist
 
-- [ ] Local Jenkins redeploy completes successfully.
+- [x] Local Jenkins redeploy completes successfully.
 - [ ] Seed job runs successfully and produces the expected job set.
 - [ ] Non-admin user access is constrained as intended.
 - [ ] Website pipeline skip logic behaves correctly across separate runs.
 - [x] Docs match actual repository contents and runtime behavior.
-- [ ] Controller image rebuild is reproducible.
+- [x] Controller image rebuild is reproducible.
 
 ## Recommended Change Breakdown
 
@@ -205,3 +206,4 @@ To keep risk manageable, implement this plan as a small series of pull requests:
 
 - Phase 1 and Phase 2 should be treated as blockers before expanding Jenkins usage to additional users or repositories.
 - If live Jenkins currently depends on UI-only security settings, capture those settings in JCasC before making any cleanup changes that could overwrite them.
+- Local validation on 2026-07-10 confirmed Jenkins boots successfully with `GithubSecurityRealm` + `GlobalMatrixAuthorizationStrategy` applied from JCasC and no matrix-auth security warning after pinning `matrix-auth:3.2.10`.

@@ -27,8 +27,6 @@ jenkins:
   numExecutors: 2
   mode: NORMAL
   scmCheckoutRetryCount: 0
-  remotingSecurity:
-    enabled: true
   clouds:
     - docker:
         name: "local-docker"
