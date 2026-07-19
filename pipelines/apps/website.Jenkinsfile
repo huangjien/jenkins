@@ -93,7 +93,7 @@ pipeline {
     }
 
     stage('Deploy') {
-      when { 
+      when {
         allOf {
           expression { env.SKIP_PIPELINE != 'true' }
           expression { params.RUN_CD == true }
@@ -101,50 +101,52 @@ pipeline {
       }
       steps {
         dir('website') {
-          withCredentials([
-            string(credentialsId: 'gcp_project_id', variable: 'PROJECT_ID'),
-            string(credentialsId: 'gcp_sa_key', variable: 'GCP_SA_KEY_JSON'),
-            string(credentialsId: 'home_upstream_host', variable: 'HOME_UPSTREAM_HOST'),
-            string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
-            usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
-          ]) {
-            sh '''
-              set -eux
-              [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
-              [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]]
+          catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE', message: 'Deploy skipped: required credentials are not configured in Jenkins.') {
+            withCredentials([
+              string(credentialsId: 'gcp_project_id', variable: 'PROJECT_ID'),
+              string(credentialsId: 'gcp_sa_key', variable: 'GCP_SA_KEY_JSON'),
+              string(credentialsId: 'home_upstream_host', variable: 'HOME_UPSTREAM_HOST'),
+              string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
+              usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
+            ]) {
+              sh '''
+                set -eux
+                [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
+                [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]]
 
-              IMAGE_TAG="${EDGE_IMAGE_REPO}:$(git rev-parse --short=8 HEAD)"
-              printf '%s' "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-              docker buildx build --platform linux/amd64 --push -f Dockerfile.edge -t "$IMAGE_TAG" -t "${EDGE_IMAGE_REPO}:latest" .
-              docker logout
+                IMAGE_TAG="${EDGE_IMAGE_REPO}:$(git rev-parse --short=8 HEAD)"
+                printf '%s' "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                docker buildx build --platform linux/amd64 --push -f Dockerfile.edge -t "$IMAGE_TAG" -t "${EDGE_IMAGE_REPO}:latest" .
+                docker logout
 
-              sed \
-                -e "s|__SERVICE_NAME__|${SERVICE_NAME}|g" \
-                -e "s|__EDGE_IMAGE__|${IMAGE_TAG}|g" \
-                -e "s|__HOME_UPSTREAM_HOST__|${HOME_UPSTREAM_HOST}|g" \
-                -e "s|__HOME_UPSTREAM_PORT__|${HOME_UPSTREAM_PORT}|g" \
-                -e "s|__RELAY_LISTEN_PORT__|18080|g" \
-                -e "s|__TS_ADVERTISE_TAGS__|tag:cloud-run-edge|g" \
-                -e "s|__TS_AUTHKEY_SECRET__|TS_AUTHKEY|g" \
-                deploy/cloudrun/service.yaml > cloudrun-service.rendered.yaml
+                sed \
+                  -e "s|__SERVICE_NAME__|${SERVICE_NAME}|g" \
+                  -e "s|__EDGE_IMAGE__|${IMAGE_TAG}|g" \
+                  -e "s|__HOME_UPSTREAM_HOST__|${HOME_UPSTREAM_HOST}|g" \
+                  -e "s|__HOME_UPSTREAM_PORT__|${HOME_UPSTREAM_PORT}|g" \
+                  -e "s|__RELAY_LISTEN_PORT__|18080|g" \
+                  -e "s|__TS_ADVERTISE_TAGS__|tag:cloud-run-edge|g" \
+                  -e "s|__TS_AUTHKEY_SECRET__|TS_AUTHKEY|g" \
+                  deploy/cloudrun/service.yaml > cloudrun-service.rendered.yaml
 
-              ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
-              printf '%s' "$GCP_SA_KEY_JSON" > gcp-sa.json
+                ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
+                printf '%s' "$GCP_SA_KEY_JSON" > gcp-sa.json
 
-              docker run --rm -v "$PWD":/workspace -w /workspace \
-                -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                gcr.io/google.com/cloudsdktool/google-cloud-cli:slim sh -lc '
-                  set -eux
-                  gcloud auth activate-service-account --key-file=/workspace/gcp-sa.json
-                  gcloud config set project "$PROJECT_ID"
-                  gcloud run services replace /workspace/cloudrun-service.rendered.yaml --region "$RUN_REGION" --platform managed
-                  gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-                  gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)" > /workspace/service_url.txt
-                '
+                docker run --rm -v "$PWD":/workspace -w /workspace \
+                  -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
+                  gcr.io/google.com/cloudsdktool/google-cloud-cli:slim sh -lc '
+                    set -eux
+                    gcloud auth activate-service-account --key-file=/workspace/gcp-sa.json
+                    gcloud config set project "$PROJECT_ID"
+                    gcloud run services replace /workspace/cloudrun-service.rendered.yaml --region "$RUN_REGION" --platform managed
+                    gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
+                    gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)" > /workspace/service_url.txt
+                  '
 
-              SERVICE_URL="$(cat service_url.txt)"
-              curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
-            '''
+                SERVICE_URL="$(cat service_url.txt)"
+                curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
+              '''
+            }
           }
         }
       }
