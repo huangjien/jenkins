@@ -8,6 +8,8 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
 
+  triggers { cron('H/5 * * * *') }
+
   parameters {
     booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Run pipeline even if main has no new commit.')
     booleanParam(name: 'RUN_CD', defaultValue: false, description: 'Run deployment stages after CI passes.')
@@ -37,16 +39,14 @@ pipeline {
 
           def headSha = headOutput.tokenize()[0]
           env.WEBSITE_HEAD_SHA = headSha
-          def previousDescription = currentBuild.previousSuccessfulBuild?.description ?: ''
-          def previousShaMatch = previousDescription =~ /\[website-sha:([0-9a-f]{40})\]/
-          def lastBuiltSha = previousShaMatch ? previousShaMatch[0][1] : ''
+          def markerFile = '.website_last_built_sha'
+          def lastBuiltSha = fileExists(markerFile) ? readFile(markerFile).trim() : ''
 
           if (lastBuiltSha && lastBuiltSha == headSha && !params.FORCE_BUILD) {
             env.SKIP_PIPELINE = 'true'
-            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${headSha.take(8)}) [website-sha:${headSha}]"
+            currentBuild.description = "No changes on ${env.WEBSITE_BRANCH} (${headSha.take(8)})"
             echo currentBuild.description
           } else {
-            currentBuild.description = "Queued ${env.WEBSITE_BRANCH} (${headSha.take(8)}) [website-sha:${headSha}]"
             echo "Detected new commit on ${env.WEBSITE_BRANCH}: ${headSha.take(8)}"
           }
         }
@@ -109,13 +109,8 @@ pipeline {
               string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
               usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
             ]) {
-              // Decode any literal \n sequences inside the secret JSON so the
-              // private_key field contains real newlines. Without this, gcloud
-              // rejects the file with "Invalid control character".
-              writeFile file: 'gcp-sa.json', text: GCP_SA_KEY_JSON.replace('\\n', '\n').replace('\\r', '\r')
               sh '''#!/usr/bin/env bash
                 set -eux
-                pwd
                 [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
                 [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]] || { echo "HOME_UPSTREAM_PORT is not numeric: '$HOME_UPSTREAM_PORT'" >&2; exit 1; }
 
@@ -136,12 +131,14 @@ pipeline {
 
                 ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
 
-                # Stream the SA JSON into the gcloud sidecar over stdin.
-                # We can't pass it as an env var because private_key contains
-                # embedded newlines that env vars can't carry. The Dockerfile
-                # inside the gcloud container writes /tmp/gcp-sa.json from
-                # stdin via `cat > /tmp/gcp-sa.json` and then activates.
-                cat gcp-sa.json \
+                # Stream the SA JSON into the gcloud sidecar over stdin so we
+                # don't rely on bind-mounting the file (which can be flaky in
+                # Docker-in-Docker agents). The credential stores the JSON with
+                # the standard "\\n" escape sequences inside the private_key
+                # value, so printf '%s' preserves them literally; gcloud then
+                # writes the file via `cat > /tmp/gcp-sa.json` inside the
+                # sidecar.
+                printf '%s' "$GCP_SA_KEY_JSON" \
                   | docker run --rm -i \
                       -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                       -v "$PWD":/workspace \
@@ -175,9 +172,8 @@ pipeline {
   post {
     success {
       script {
-        if (env.WEBSITE_HEAD_SHA?.trim()) {
-          def statusPrefix = env.SKIP_PIPELINE == 'true' ? 'No changes on' : 'Built'
-          currentBuild.description = "${statusPrefix} ${env.WEBSITE_BRANCH} (${env.WEBSITE_HEAD_SHA.take(8)}) [website-sha:${env.WEBSITE_HEAD_SHA}]"
+        if (env.SKIP_PIPELINE != 'true' && env.WEBSITE_HEAD_SHA?.trim()) {
+          writeFile file: '.website_last_built_sha', text: "${env.WEBSITE_HEAD_SHA}\n"
         }
       }
     }
