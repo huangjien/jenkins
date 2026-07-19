@@ -109,10 +109,10 @@ pipeline {
               string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
               usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
             ]) {
-              sh '''
+              sh '''#!/usr/bin/env bash
                 set -eux
                 [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
-                [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]]
+                [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]] || { echo "HOME_UPSTREAM_PORT is not numeric: '$HOME_UPSTREAM_PORT'" >&2; exit 1; }
 
                 IMAGE_TAG="${EDGE_IMAGE_REPO}:$(git rev-parse --short=8 HEAD)"
                 printf '%s' "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
