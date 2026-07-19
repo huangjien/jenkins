@@ -140,21 +140,24 @@ pipeline {
                 # preserves them literally and gcloud parses the file
                 # correctly inside the sidecar.
                 export MANIFEST_CONTENT="$(cat cloudrun-service.rendered.yaml)"
-                SERVICE_URL=$(printf '%s' "$GCP_SA_KEY_JSON" \
+                # Run the deploy script inside the gcloud sidecar and capture
+                # the Cloud Run URL printed by the last gcloud command. Avoid
+                # nesting single-quoted shell scripts inside $(...) which is
+                # fragile when the inner script contains quoted env-var refs.
+                printf '%s' "$GCP_SA_KEY_JSON" \
                   | docker run --rm -i \
                       -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                       -e MANIFEST_CONTENT \
                       gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                      sh -c '
+                      bash -c '
                         cat > /tmp/gcp-sa.json
                         printf "%s" "$MANIFEST_CONTENT" > /tmp/manifest.yaml
                         gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
                         gcloud config set project "$PROJECT_ID"
                         gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
                         gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)"
-                      ')
-                printf '%s' "$SERVICE_URL" > service_url.txt
+                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format=value\(status.url\)
+                      ' > service_url.txt
 
                 SERVICE_URL="$(cat service_url.txt)"
                 curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
