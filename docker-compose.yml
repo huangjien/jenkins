@@ -15,8 +15,8 @@ services:
       EXTERNAL_URL: ${EXTERNAL_URL:-http://imac.tail94eaca.ts.net:8888/}
       GITHUB_WEB_URI: ${GITHUB_WEB_URI:-https://github.com}
       GITHUB_API_URI: ${GITHUB_API_URI:-https://api.github.com}
-      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
-      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-placeholder-client-id}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-placeholder-client-secret}
       JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-huangjien}
       JENKINS_DEVELOPER_GROUP: ${JENKINS_DEVELOPER_GROUP:-authenticated}
     volumes:
