@@ -135,7 +135,7 @@ pipeline {
                 # Pipe the SA JSON into gcloud over stdin so we don't need a
                 # bind-mounted key file (Docker-in-Docker mounts sometimes
                 # don't expose agent-side paths reliably to sidecar containers).
-                printf '%s' "$GCP_SA_KEY_JSON" \
+                printf '%b' "$GCP_SA_KEY_JSON" \
                   | docker run --rm -i \
                       -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                       -v "$PWD":/workspace \
