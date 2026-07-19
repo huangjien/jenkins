@@ -1,4 +1,5 @@
 /.jenkins_home/
+/.jenkins.env
 
 # macOS
 .DS_Store
