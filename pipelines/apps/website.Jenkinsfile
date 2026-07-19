@@ -111,6 +111,7 @@ pipeline {
             ]) {
               sh '''#!/usr/bin/env bash
                 set -eux
+                pwd
                 [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
                 [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]] || { echo "HOME_UPSTREAM_PORT is not numeric: '$HOME_UPSTREAM_PORT'" >&2; exit 1; }
 
@@ -131,6 +132,8 @@ pipeline {
 
                 ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
                 printf '%s' "$GCP_SA_KEY_JSON" > gcp-sa.json
+                ls -la gcp-sa.json
+                head -c 32 gcp-sa.json; echo
 
                 docker run --rm -v "$PWD":/workspace -w /workspace \
                   -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
