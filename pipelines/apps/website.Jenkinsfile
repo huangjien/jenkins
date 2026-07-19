@@ -109,6 +109,10 @@ pipeline {
               string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
               usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
             ]) {
+              // Decode any literal \n sequences inside the secret JSON so the
+              // private_key field contains real newlines. Without this, gcloud
+              // rejects the file with "Invalid control character".
+              writeFile file: 'gcp-sa.json', text: GCP_SA_KEY_JSON.replace('\\n', '\n').replace('\\r', '\r')
               sh '''#!/usr/bin/env bash
                 set -eux
                 pwd
@@ -132,16 +136,17 @@ pipeline {
 
                 ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
 
-                # Pipe the SA JSON into gcloud over stdin so we don't need a
-                # bind-mounted key file (Docker-in-Docker mounts sometimes
-                # don't expose agent-side paths reliably to sidecar containers).
-                printf '%b' "$GCP_SA_KEY_JSON" \
+                # Stream the SA JSON into the gcloud sidecar over stdin.
+                # We can't pass it as an env var because private_key contains
+                # embedded newlines that env vars can't carry. The Dockerfile
+                # inside the gcloud container writes /tmp/gcp-sa.json from
+                # stdin via `cat > /tmp/gcp-sa.json` and then activates.
+                cat gcp-sa.json \
                   | docker run --rm -i \
                       -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                       -v "$PWD":/workspace \
                       gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                      sh -lc '
-                        set -eux
+                      sh -c '
                         cat > /tmp/gcp-sa.json
                         gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
                         gcloud config set project "$PROJECT_ID"
