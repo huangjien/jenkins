@@ -131,26 +131,30 @@ pipeline {
 
                 ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
 
-                # Stream the SA JSON into the gcloud sidecar over stdin so we
-                # don't rely on bind-mounting the file (which can be flaky in
-                # Docker-in-Docker agents). The credential stores the JSON with
-                # the standard "\\n" escape sequences inside the private_key
-                # value, so printf '%s' preserves them literally; gcloud then
-                # writes the file via `cat > /tmp/gcp-sa.json` inside the
-                # sidecar.
-                printf '%s' "$GCP_SA_KEY_JSON" \
+                # Stream the SA JSON into the gcloud sidecar over stdin and
+                # pass the rendered Cloud Run manifest as an env var so the
+                # sidecar doesn't need any bind mounts (bind mounts of the
+                # agent workspace into a DinD sidecar are flaky). The
+                # credential stores the JSON with the standard "\n" escape
+                # sequences inside the private_key value, so printf '%s'
+                # preserves them literally and gcloud parses the file
+                # correctly inside the sidecar.
+                export MANIFEST_CONTENT="$(cat cloudrun-service.rendered.yaml)"
+                SERVICE_URL=$(printf '%s' "$GCP_SA_KEY_JSON" \
                   | docker run --rm -i \
                       -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                      -v "$PWD":/workspace \
+                      -e MANIFEST_CONTENT \
                       gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
                       sh -c '
                         cat > /tmp/gcp-sa.json
+                        printf "%s" "$MANIFEST_CONTENT" > /tmp/manifest.yaml
                         gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
                         gcloud config set project "$PROJECT_ID"
-                        gcloud run services replace /workspace/cloudrun-service.rendered.yaml --region "$RUN_REGION" --platform managed
+                        gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
                         gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)" > /workspace/service_url.txt
-                      '
+                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)"
+                      ')
+                printf '%s' "$SERVICE_URL" > service_url.txt
 
                 SERVICE_URL="$(cat service_url.txt)"
                 curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
