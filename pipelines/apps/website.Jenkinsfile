@@ -140,13 +140,22 @@ pipeline {
               // stdout. We then read the URL from service_url.txt in a
               // separate `sh` and curl the health endpoint.
               writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
+echo "sidecar started PID=$$ PROJECT_ID=$PROJECT_ID RUN_REGION=$RUN_REGION SERVICE_NAME=$SERVICE_NAME"
 cat > /tmp/gcp-sa.json
+echo "gcp-sa.json size: $(wc -c < /tmp/gcp-sa.json)"
+ls -la /workspace/rendered-manifest.yaml
 cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
-gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
+echo "manifest size: $(wc -c < /tmp/manifest.yaml)"
+gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json 2>&1
+echo "auth done"
 gcloud config set project "$PROJECT_ID"
-gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url"
+echo "config done"
+gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed 2>&1
+echo "replace done"
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker" 2>&1
+echo "iam done"
+gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url" 2>&1
+echo "describe done"
 '''
               sh 'chmod +x /tmp/deploy-sidecar.sh && SIDECAR_B64=$(base64 -i /tmp/deploy-sidecar.sh | tr -d "\\n") && printf "%s" "$SIDECAR_B64" > /tmp/sidecar.b64'
 
