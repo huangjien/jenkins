@@ -141,23 +141,28 @@ pipeline {
               // separate `sh` and curl the health endpoint.
               writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
 cat > /tmp/gcp-sa.json
-cp /tmp/rendered-manifest.yaml /tmp/manifest.yaml
+cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
 gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
 gcloud config set project "$PROJECT_ID"
 gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
 gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url"
 '''
-              sh 'chmod +x /tmp/deploy-sidecar.sh'
+              sh 'chmod +x /tmp/deploy-sidecar.sh && SIDECAR_B64=$(base64 -i /tmp/deploy-sidecar.sh | tr -d "\\n") && printf "%s" "$SIDECAR_B64" > /tmp/sidecar.b64'
 
+              // Pass the sidecar script as a base64 env var so we don't have
+              // to bind-mount it (the cloud-sdk slim image already has /tmp
+              // and /run populated with directories that collide with our
+              // bind mounts). The base64 value is in /tmp/sidecar.b64.
               sh '''#!/usr/bin/env bash
                 set -eux
+                SIDECAR_B64="$(cat /tmp/sidecar.b64)"
                 printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
                   -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                  -v /tmp/deploy-sidecar.sh:/run/deploy-sidecar.sh:ro \
-                  -v /tmp/rendered-manifest.yaml:/run/rendered-manifest.yaml:ro \
+                  -e SIDECAR_B64 \
+                  -v /tmp/rendered-manifest.yaml:/workspace/rendered-manifest.yaml:ro \
                   gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                  bash /run/deploy-sidecar.sh > service_url.txt
+                  sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' > service_url.txt
               '''
               sh '''#!/usr/bin/env bash
                 set -eux
