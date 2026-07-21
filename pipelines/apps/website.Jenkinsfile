@@ -146,15 +146,18 @@ echo "gcp-sa.json size: $(wc -c < /tmp/gcp-sa.json)"
 ls -la /workspace/rendered-manifest.yaml
 cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
 echo "manifest size: $(wc -c < /tmp/manifest.yaml)"
-gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json 2>&1
+gcloud --quiet auth activate-service-account --key-file=/tmp/gcp-sa.json
 echo "auth done"
-gcloud config set project "$PROJECT_ID"
+gcloud --quiet config set project "$PROJECT_ID"
 echo "config done"
-gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed 2>&1
+# `gcloud run services replace` works for both creating and updating Cloud Run
+# services, so we don't need a separate `create` step. Use --quiet to skip
+# confirmations and --format to make errors machine-readable.
+gcloud --quiet run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
 echo "replace done"
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker" 2>&1
+gcloud --quiet run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
 echo "iam done"
-gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url" 2>&1
+gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)"
 echo "describe done"
 '''
               sh 'chmod +x /tmp/deploy-sidecar.sh && SIDECAR_B64=$(base64 -i /tmp/deploy-sidecar.sh | tr -d "\\n") && printf "%s" "$SIDECAR_B64" > /tmp/sidecar.b64'
