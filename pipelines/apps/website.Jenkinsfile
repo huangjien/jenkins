@@ -130,45 +130,37 @@ pipeline {
                   deploy/cloudrun/service.yaml > cloudrun-service.rendered.yaml
 
                 ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
+                cat cloudrun-service.rendered.yaml > /tmp/rendered-manifest.yaml
+              '''
 
-                # Stream the SA JSON into the gcloud sidecar over stdin and
-                # pass the rendered Cloud Run manifest as an env var so the
-                # sidecar doesn't need any bind mounts (bind mounts of the
-                # agent workspace into a DinD sidecar are flaky). The
-                # credential stores the JSON with the standard "\n" escape
-                # sequences inside the private_key value, so printf '%s'
-                # preserves them literally and gcloud parses the file
-                # correctly inside the sidecar.
-                export MANIFEST_CONTENT="$(cat cloudrun-service.rendered.yaml)"
-                # Write the sidecar script to a temp file in the agent and
-                # mount it into the gcloud container. The container reads
-                # the script from there instead of via bash -c '<script>',
-                # which is fragile when the script contains nested quotes.
-                # We pass the SA JSON via stdin (the container reads it
-                # into /tmp/gcp-sa.json via `cat`) and the rendered manifest
-                # as an env var (the container writes it to /tmp/manifest.yaml
-                # via `printf`). The container prints the service URL to
-                # stdout, which we redirect into service_url.txt.
-                cat > /tmp/deploy-sidecar.sh <<'SIDECAR'
-set -eux
+              // Write the sidecar script via writeFile (Groovy handles the
+              // quoting cleanly). The script consumes the SA JSON from stdin
+              // (piped in from the next `sh`) and the rendered manifest from
+              // the file we just wrote, then prints the Cloud Run URL to
+              // stdout. We then read the URL from service_url.txt in a
+              // separate `sh` and curl the health endpoint.
+              writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
 cat > /tmp/gcp-sa.json
-printf "%s" "$MANIFEST_CONTENT" > /tmp/manifest.yaml
+cp /tmp/rendered-manifest.yaml /tmp/manifest.yaml
 gcloud auth activate-service-account --key-file=/tmp/gcp-sa.json
 gcloud config set project "$PROJECT_ID"
 gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
 gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url"
-SIDECAR
-                chmod +x /tmp/deploy-sidecar.sh
+'''
+              sh 'chmod +x /tmp/deploy-sidecar.sh'
 
-                printf '%s' "$GCP_SA_KEY_JSON" \
-                  | docker run --rm -i \
-                      -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                      -e MANIFEST_CONTENT \
-                      -v /tmp/deploy-sidecar.sh:/tmp/deploy-sidecar.sh:ro \
-                      gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                      bash /tmp/deploy-sidecar.sh > service_url.txt
-
+              sh '''#!/usr/bin/env bash
+                set -eux
+                printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
+                  -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
+                  -v /tmp/deploy-sidecar.sh:/tmp/deploy-sidecar.sh:ro \
+                  -v /tmp/rendered-manifest.yaml:/tmp/rendered-manifest.yaml:ro \
+                  gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
+                  bash /tmp/deploy-sidecar.sh > service_url.txt
+              '''
+              sh '''#!/usr/bin/env bash
+                set -eux
                 SERVICE_URL="$(cat service_url.txt)"
                 curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
               '''
