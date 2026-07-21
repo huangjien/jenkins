@@ -171,17 +171,17 @@ echo "describe done"
               sh '''#!/usr/bin/env bash
                 set -eux
                 SIDECAR_B64="$(cat /tmp/sidecar.b64)"
+                echo "SIDECAR_B64 length: ${#SIDECAR_B64}"
+                echo "PROJECT_ID: ${PROJECT_ID:0:5}..."
                 printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
                   -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                   -e SIDECAR_B64 \
                   -v /tmp/rendered-manifest.yaml:/workspace/rendered-manifest.yaml:ro \
                   gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
                   sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' \
-                  > service_url.txt 2>service_url.err
-                if [ -s service_url.err ]; then
-                  echo "Docker run stderr:"
-                  cat service_url.err
-                fi
+                  > service_url.txt 2>&1 || echo "docker run exit code: $?"
+                echo "service_url.txt content:"
+                cat service_url.txt
               '''
               sh '''#!/usr/bin/env bash
                 set -eux
