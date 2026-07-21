@@ -162,7 +162,12 @@ gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$
                   -e SIDECAR_B64 \
                   -v /tmp/rendered-manifest.yaml:/workspace/rendered-manifest.yaml:ro \
                   gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                  sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' > service_url.txt
+                  sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' \
+                  > service_url.txt 2>service_url.err
+                if [ -s service_url.err ]; then
+                  echo "Docker run stderr:"
+                  cat service_url.err
+                fi
               '''
               sh '''#!/usr/bin/env bash
                 set -eux
