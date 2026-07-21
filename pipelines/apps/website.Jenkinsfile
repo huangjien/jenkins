@@ -156,7 +156,7 @@ pipeline {
                         gcloud config set project "$PROJECT_ID"
                         gcloud run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
                         gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format='value(status.url)'
+                        gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value:status.url"
                       ' > service_url.txt
 
                 SERVICE_URL="$(cat service_url.txt)"
