@@ -141,9 +141,11 @@ pipeline {
               // separate `sh` and curl the health endpoint.
               writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
 echo "sidecar started PID=$$ PROJECT_ID=$PROJECT_ID RUN_REGION=$RUN_REGION SERVICE_NAME=$SERVICE_NAME"
+mkdir -p /workspace
+ls -la /workspace
 cat > /tmp/gcp-sa.json
 echo "gcp-sa.json size: $(wc -c < /tmp/gcp-sa.json)"
-ls -la /workspace/rendered-manifest.yaml
+ls -la /workspace/rendered-manifest.yaml 2>&1 || echo "no manifest at /workspace"
 cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
 echo "manifest size: $(wc -c < /tmp/manifest.yaml)"
 gcloud --quiet auth activate-service-account --key-file=/tmp/gcp-sa.json
