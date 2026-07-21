@@ -154,10 +154,10 @@ gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$
                 set -eux
                 printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
                   -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                  -v /tmp/deploy-sidecar.sh:/tmp/deploy-sidecar.sh:ro \
-                  -v /tmp/rendered-manifest.yaml:/tmp/rendered-manifest.yaml:ro \
+                  -v /tmp/deploy-sidecar.sh:/run/deploy-sidecar.sh:ro \
+                  -v /tmp/rendered-manifest.yaml:/run/rendered-manifest.yaml:ro \
                   gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                  bash /tmp/deploy-sidecar.sh > service_url.txt
+                  bash /run/deploy-sidecar.sh > service_url.txt
               '''
               sh '''#!/usr/bin/env bash
                 set -eux
