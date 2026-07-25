@@ -140,27 +140,17 @@ pipeline {
               // stdout. We then read the URL from service_url.txt in a
               // separate `sh` and curl the health endpoint.
               writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
-echo "sidecar started PID=$$ PROJECT_ID=$PROJECT_ID RUN_REGION=$RUN_REGION SERVICE_NAME=$SERVICE_NAME"
 mkdir -p /workspace
-ls -la /workspace
 cat > /tmp/gcp-sa.json
-echo "gcp-sa.json size: $(wc -c < /tmp/gcp-sa.json)"
-ls -la /workspace/rendered-manifest.yaml 2>&1 || echo "no manifest at /workspace"
 cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
-echo "manifest size: $(wc -c < /tmp/manifest.yaml)"
 gcloud --quiet auth activate-service-account --key-file=/tmp/gcp-sa.json
-echo "auth done"
 gcloud --quiet config set project "$PROJECT_ID"
-echo "config done"
 # `gcloud run services replace` works for both creating and updating Cloud Run
 # services, so we don't need a separate `create` step. Use --quiet to skip
-# confirmations and --format to make errors machine-readable.
+# confirmations.
 gcloud --quiet run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
-echo "replace done"
 gcloud --quiet run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-echo "iam done"
 gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)"
-echo "describe done"
 '''
               sh 'chmod +x /tmp/deploy-sidecar.sh && SIDECAR_B64=$(base64 -i /tmp/deploy-sidecar.sh | tr -d "\\n") && printf "%s" "$SIDECAR_B64" > /tmp/sidecar.b64'
 
@@ -171,17 +161,17 @@ echo "describe done"
               sh '''#!/usr/bin/env bash
                 set -eux
                 SIDECAR_B64="$(cat /tmp/sidecar.b64)"
-                echo "SIDECAR_B64 length: ${#SIDECAR_B64}"
-                echo "PROJECT_ID: ${PROJECT_ID:0:5}..."
                 printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
                   -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
                   -e SIDECAR_B64 \
                   -v /tmp/rendered-manifest.yaml:/workspace/rendered-manifest.yaml:ro \
                   gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
                   sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' \
-                  > service_url.txt 2>&1 || echo "docker run exit code: $?"
-                echo "service_url.txt content:"
-                cat service_url.txt
+                  > service_url.txt 2>service_url.err || echo "docker run exit code: $?"
+                if [ -s service_url.err ]; then
+                  echo "Docker run stderr:"
+                  cat service_url.err
+                fi
               '''
               sh '''#!/usr/bin/env bash
                 set -eux
