@@ -95,25 +95,92 @@ pipeline {
       }
       steps {
         dir('website') {
-          sh '''#!/usr/bin/env bash
-            set -eux
+          // The website container must receive all runtime secrets
+          // (NEXTAUTH_SECRET, GITHUB_CLIENT_SECRET, OPEN_AI_KEY, etc.) at
+          // container start. Without them, NODE_ENV=production is set by
+          // the Dockerfile but the runtime guard in
+          // src/pages/api/auth/[...nextauth].js trips on the first auth
+          // request with "NEXTAUTH_SECRET must be set in production" and
+          // every /api/auth/* route returns HTTP 500.
+          //
+          // The single source of truth is a Jenkins secret FILE credential
+          // with id 'website_env_file' — uploaded once via the Jenkins UI
+          // (Manage Jenkins > Credentials) and shaped exactly like the
+          // project's .env.home: one KEY=VALUE per line, LF line endings.
+          //
+          // The same file content should mirror the .env.home file on the
+          // home machine so docker compose, deploy-home.sh, and this
+          // pipeline all see identical env vars.
+          withCredentials([file(credentialsId: 'website_env_file', variable: 'WEBSITE_ENV_FILE')]) {
+            sh '''#!/usr/bin/env bash
+              set -eux
 
-            IMAGE_NAME="website-local"
-            CONTAINER_NAME="website-web"
-            HOST_PORT="8080"
-            CONTAINER_PORT="8080"
+              IMAGE_NAME="website-local"
+              CONTAINER_NAME="website-web"
+              HOST_PORT="8080"
+              CONTAINER_PORT="8080"
 
-            docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-            docker image rm -f "$IMAGE_NAME" >/dev/null 2>&1 || true
+              # Fail closed: refuse to deploy a container that doesn't have
+              # the production secrets. This turns what was a silent
+              # partial-deploy bug into an explicit pipeline failure.
+              test -s "${WEBSITE_ENV_FILE}" || {
+                echo "ERROR: website_env_file credential is missing or empty." >&2
+                echo "Upload it via Jenkins UI: Manage Jenkins > Credentials >" >&2
+                echo "System > Global credentials > Add > Secret file," >&2
+                echo "ID = website_env_file, file = a copy of .env.home." >&2
+                exit 1
+              }
 
-            for cid in $(docker ps -aq --filter "publish=${HOST_PORT}"); do
-              docker rm -f "$cid" >/dev/null 2>&1 || true
-            done
+              # Sanity check the env file is shaped the way the container
+              # expects: at minimum, NEXTAUTH_SECRET must be present and
+              # non-empty, or the deploy will fail at first auth request.
+              if ! grep -qE '^NEXTAUTH_SECRET=.+' "${WEBSITE_ENV_FILE}"; then
+                echo "ERROR: website_env_file does not contain a non-empty NEXTAUTH_SECRET." >&2
+                exit 1
+              fi
 
-            docker build -t "$IMAGE_NAME" .
-            docker run -d --name "$CONTAINER_NAME" -p "${HOST_PORT}:${CONTAINER_PORT}" "$IMAGE_NAME"
-            docker ps --filter "name=^/${CONTAINER_NAME}$"
-          '''
+              docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+              docker image rm -f "$IMAGE_NAME" >/dev/null 2>&1 || true
+
+              for cid in $(docker ps -aq --filter "publish=${HOST_PORT}"); do
+                docker rm -f "$cid" >/dev/null 2>&1 || true
+              done
+
+              docker build -t "$IMAGE_NAME" .
+              docker run -d \
+                --name "$CONTAINER_NAME" \
+                -p "${HOST_PORT}:${CONTAINER_PORT}" \
+                --env-file "${WEBSITE_ENV_FILE}" \
+                "$IMAGE_NAME"
+              docker ps --filter "name=^/${CONTAINER_NAME}$"
+
+              # Post-deploy verification: assert the secret actually reached
+              # the container's runtime environment. This catches any
+              # future regression where the --env-file flag is removed or
+              # the credential file is replaced with something stale.
+              SECRET_LEN=$(docker exec "$CONTAINER_NAME" \
+                sh -c 'printf %s "$NEXTAUTH_SECRET" | wc -c' 2>/dev/null || echo 0)
+              if [ "$SECRET_LEN" -lt 32 ]; then
+                echo "ERROR: NEXTAUTH_SECRET did not reach the container (len=$SECRET_LEN)." >&2
+                docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+                exit 1
+              fi
+              echo "OK: NEXTAUTH_SECRET reached container (len=$SECRET_LEN)."
+
+              # Hit a route that loads the NextAuth module. If the runtime
+              # guard inside [...nextauth].js fires (SECRET missing in
+              # NODE_ENV=production), the route will throw and return 500.
+              sleep 2
+              STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+                http://localhost:${HOST_PORT}/api/auth/providers || echo 000)
+              if [ "$STATUS" != "200" ]; then
+                echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200)." >&2
+                docker logs "$CONTAINER_NAME" --tail 50 || true
+                exit 1
+              fi
+              echo "OK: /api/auth/providers returned HTTP 200."
+            '''
+          }
         }
       }
     }
