@@ -170,12 +170,45 @@ pipeline {
               # Hit a route that loads the NextAuth module. If the runtime
               # guard inside [...nextauth].js fires (SECRET missing in
               # NODE_ENV=production), the route will throw and return 500.
-              sleep 2
-              STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-                http://localhost:${HOST_PORT}/api/auth/providers || echo 000)
+              #
+              # Wait until the Next.js standalone server is actually ready
+              # before probing — the Dockerfile's HEALTHCHECK polls
+              # /api/health, but that uses the container's internal view.
+              # Probe externally from the host:port the user will hit.
+              #
+              # The container's first request after `docker run` can take
+              # >5s to return 200 even on a healthy build, because:
+              #   - Next.js standalone boots lazily on first request;
+              #   - the `health: starting` window obscures readiness; and
+              #   - cold compilation of the route module takes time.
+              # A static `sleep 2` is racy and causes false-negative 500s
+              # (observed in build #1487), so poll up to 60s instead.
+              READY=0
+              for i in $(seq 1 30); do
+                STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
+                  "http://localhost:${HOST_PORT}/api/health" || echo 000)
+                if [ "$STATUS" = "200" ]; then
+                  READY=1
+                  echo "OK: /api/health returned 200 after $((i*2))s."
+                  break
+                fi
+                sleep 2
+              done
+              if [ "$READY" != "1" ]; then
+                echo "ERROR: /api/health did not return 200 within 60s (last status=$STATUS)." >&2
+                docker logs "$CONTAINER_NAME" --tail 50 || true
+                exit 1
+              fi
+
+              # NextAuth module is heavier than /api/health — it pulls in
+              # JWT/OAuth/JWS code on first request, which can itself take
+              # a couple seconds. Probe it as the final acceptance check.
+              STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+                "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
               if [ "$STATUS" != "200" ]; then
                 echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200)." >&2
-                docker logs "$CONTAINER_NAME" --tail 50 || true
+                echo "--- container logs (last 80 lines) ---" >&2
+                docker logs "$CONTAINER_NAME" --tail 80 || true
                 exit 1
               fi
               echo "OK: /api/auth/providers returned HTTP 200."
