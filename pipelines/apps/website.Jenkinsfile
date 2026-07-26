@@ -190,28 +190,40 @@ pipeline {
               # now on so the actual error message is visible.
               PROVIDER_RESP=$(mktemp)
               READY=0
-              # Build #1491 failure mode: /api/health returned 200 almost
-              # immediately, but the first request to /api/auth/providers
-              # came back with "Empty reply from server" — the Next.js
-              # standalone server had not finished initialising the route
-              # module on first connection. The 3-attempt retry was not
-              # enough because each retry hit a freshly-spawned request
-              # handler before the underlying module finished its
-              # top-level evaluation.
+              # Build #1491 / #1493 failure mode: the agent container
+              # (a temporary Jenkins Java agent on a docker cloud)
+              # does not share network namespace with the website
+              # container it just started. `localhost:8080` inside the
+              # agent resolves to the agent's own loopback, NOT the
+              # website container, so every probe was returning 500
+              # (Jenkins's own 401/403 surfaced as 500) and the deploy
+              # never got off the ground.
               #
-              # Fix: poll BOTH /api/health AND /api/auth/providers inside
-              # the readiness loop. The container is only declared ready
-              # once /api/auth/providers returns 200. /api/health alone
-              # is insufficient as a readiness signal because it does not
-              # load the NextAuth route module.
+              # The agent and the host share /var/run/docker.sock, so
+              # the cleanest way to probe the website container is
+              # `docker exec` — that runs the probe *inside* the
+              # website container's own network namespace, where
+              # localhost:8080 actually points to the Next.js server.
+              #
+              # Build #1491 also surfaced a separate cold-start race:
+              # the first request to /api/auth/providers right after
+              # `docker run` returns "Empty reply from server" because
+              # the Next.js standalone server has not finished
+              # initialising the route module. So we poll
+              # /api/auth/providers inside the readiness loop and only
+              # declare the container ready once that returns 200.
+              # /api/health alone is NOT a sufficient readiness
+              # signal because it does not load the NextAuth module.
               for i in $(seq 1 30); do
-                HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
-                  "http://localhost:${HOST_PORT}/api/health" || echo 000)
-                PROVIDER=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 5 \
-                  "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
+                HEALTH=$(docker exec "$CONTAINER_NAME" \
+                  wget -qO- --timeout=3 "http://127.0.0.1:${CONTAINER_PORT}/api/health" \
+                  >/dev/null 2>&1 && echo 200 || echo 000)
+                PROVIDER=$(docker exec "$CONTAINER_NAME" \
+                  wget -qO- --timeout=5 "http://127.0.0.1:${CONTAINER_PORT}/api/auth/providers" \
+                  >"$PROVIDER_RESP" 2>/dev/null && echo 200 || echo 000)
                 if [ "$HEALTH" = "200" ] && [ "$PROVIDER" = "200" ]; then
                   READY=1
-                  echo "OK: /api/health=200 and /api/auth/providers=200 after $((i*2))s."
+                  echo "OK: /api/health=200 and /api/auth/providers=200 after $((i*2))s (probed via docker exec)."
                   break
                 fi
                 if [ "$((i % 5))" = "0" ]; then
