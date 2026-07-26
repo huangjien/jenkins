@@ -4,8 +4,8 @@ jenkins:
     github:
       githubWebUri: "${GITHUB_WEB_URI:-https://github.com}"
       githubApiUri: "${GITHUB_API_URI:-https://api.github.com}"
-      clientID: "${GITHUB_OAUTH_CLIENT_ID}"
-      clientSecret: "${GITHUB_OAUTH_CLIENT_SECRET}"
+      clientID: "${GITHUB_OAUTH_CLIENT_ID:-}"
+      clientSecret: "${GITHUB_OAUTH_CLIENT_SECRET:-}"
       oauthScopes: "read:org,user:email"
   authorizationStrategy:
     globalMatrix:

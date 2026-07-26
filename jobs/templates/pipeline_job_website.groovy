@@ -1,6 +1,10 @@
 pipelineJob('website-ci-cd') {
   description('Repo-managed CI/CD pipeline for website. Seed updates replace local inline config and run on the docker cloud agent.')
 
+  triggers {
+    scm('H/5 * * * *')
+  }
+
   definition {
     cpsScm {
       scm {

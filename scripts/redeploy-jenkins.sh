@@ -8,6 +8,7 @@ LEGACY_HOME="/Volumes/Windows/Jenkins/data"
 DEFAULT_EXTERNAL_URL="http://imac.tail94eaca.ts.net:8888/"
 EXTERNAL_URL="${EXTERNAL_URL:-${DEFAULT_EXTERNAL_URL}}"
 JENKINS_ADMIN_USER="${JENKINS_ADMIN_USER:-huangjien}"
+JENKINS_ADMIN_PASSWORD="${JENKINS_ADMIN_PASSWORD:-change-me-please}"
 JENKINS_DEVELOPER_GROUP="${JENKINS_DEVELOPER_GROUP:-authenticated}"
 
 # Source persistent env (GitHub OAuth, Cloud Run deploy secrets) if present.

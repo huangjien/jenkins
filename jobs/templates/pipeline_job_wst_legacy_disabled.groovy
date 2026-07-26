@@ -19,7 +19,6 @@ pipelineJob('wst') {
         }
         '''.stripIndent()
       )
-      sandbox(true)
     }
   }
 }
