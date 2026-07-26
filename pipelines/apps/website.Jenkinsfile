@@ -101,12 +101,17 @@ pipeline {
             IMAGE_NAME="website-local"
             CONTAINER_NAME="website-web"
             HOST_PORT="8080"
+            CONTAINER_PORT="8080"
 
             docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
             docker image rm -f "$IMAGE_NAME" >/dev/null 2>&1 || true
 
+            for cid in $(docker ps -aq --filter "publish=${HOST_PORT}"); do
+              docker rm -f "$cid" >/dev/null 2>&1 || true
+            done
+
             docker build -t "$IMAGE_NAME" .
-            docker run -d --name "$CONTAINER_NAME" -p "${HOST_PORT}:80" "$IMAGE_NAME"
+            docker run -d --name "$CONTAINER_NAME" -p "${HOST_PORT}:${CONTAINER_PORT}" "$IMAGE_NAME"
             docker ps --filter "name=^/${CONTAINER_NAME}$"
           '''
         }
