@@ -183,11 +183,17 @@ pipeline {
               #   - cold compilation of the route module takes time.
               # A static `sleep 2` is racy and causes false-negative 500s
               # (observed in build #1487), so poll up to 60s instead.
+              #
+              # Build #1488 failure mode: /api/health returned 200 AND
+              # /api/auth/providers returned 500 in the same millisecond,
+              # with empty container logs. Capture the response body from
+              # now on so the actual error message is visible.
+              PROVIDER_RESP=$(mktemp)
               READY=0
               for i in $(seq 1 30); do
-                STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
+                HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
                   "http://localhost:${HOST_PORT}/api/health" || echo 000)
-                if [ "$STATUS" = "200" ]; then
+                if [ "$HEALTH" = "200" ]; then
                   READY=1
                   echo "OK: /api/health returned 200 after $((i*2))s."
                   break
@@ -195,22 +201,30 @@ pipeline {
                 sleep 2
               done
               if [ "$READY" != "1" ]; then
-                echo "ERROR: /api/health did not return 200 within 60s (last status=$STATUS)." >&2
+                echo "ERROR: /api/health did not return 200 within 60s (last status=$HEALTH)." >&2
                 docker logs "$CONTAINER_NAME" --tail 50 || true
+                rm -f "$PROVIDER_RESP"
                 exit 1
               fi
 
               # NextAuth module is heavier than /api/health — it pulls in
               # JWT/OAuth/JWS code on first request, which can itself take
-              # a couple seconds. Probe it as the final acceptance check.
-              STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+              # a couple seconds. Probe it as the final acceptance check
+              # and capture the response body so we can see the actual
+              # error message if the runtime guard fires.
+              STATUS=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 10 \
                 "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
               if [ "$STATUS" != "200" ]; then
                 echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200)." >&2
+                echo "--- response body (first 4KB) ---" >&2
+                head -c 4096 "$PROVIDER_RESP" >&2 || true
+                echo >&2
                 echo "--- container logs (last 80 lines) ---" >&2
                 docker logs "$CONTAINER_NAME" --tail 80 || true
+                rm -f "$PROVIDER_RESP"
                 exit 1
               fi
+              rm -f "$PROVIDER_RESP"
               echo "OK: /api/auth/providers returned HTTP 200."
             '''
           }
