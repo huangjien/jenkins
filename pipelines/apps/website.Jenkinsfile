@@ -190,47 +190,37 @@ pipeline {
               # now on so the actual error message is visible.
               PROVIDER_RESP=$(mktemp)
               READY=0
+              # Build #1491 failure mode: /api/health returned 200 almost
+              # immediately, but the first request to /api/auth/providers
+              # came back with "Empty reply from server" — the Next.js
+              # standalone server had not finished initialising the route
+              # module on first connection. The 3-attempt retry was not
+              # enough because each retry hit a freshly-spawned request
+              # handler before the underlying module finished its
+              # top-level evaluation.
+              #
+              # Fix: poll BOTH /api/health AND /api/auth/providers inside
+              # the readiness loop. The container is only declared ready
+              # once /api/auth/providers returns 200. /api/health alone
+              # is insufficient as a readiness signal because it does not
+              # load the NextAuth route module.
               for i in $(seq 1 30); do
                 HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
                   "http://localhost:${HOST_PORT}/api/health" || echo 000)
-                if [ "$HEALTH" = "200" ]; then
+                PROVIDER=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 5 \
+                  "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
+                if [ "$HEALTH" = "200" ] && [ "$PROVIDER" = "200" ]; then
                   READY=1
-                  echo "OK: /api/health returned 200 after $((i*2))s."
+                  echo "OK: /api/health=200 and /api/auth/providers=200 after $((i*2))s."
                   break
+                fi
+                if [ "$((i % 5))" = "0" ]; then
+                  echo "WARN: still not ready (t=$((i*2))s, health=$HEALTH, providers=$PROVIDER)..." >&2
                 fi
                 sleep 2
               done
               if [ "$READY" != "1" ]; then
-                echo "ERROR: /api/health did not return 200 within 60s (last status=$HEALTH)." >&2
-                docker logs "$CONTAINER_NAME" --tail 50 || true
-                rm -f "$PROVIDER_RESP"
-                exit 1
-              fi
-
-              # NextAuth module is heavier than /api/health — it pulls in
-              # JWT/OAuth/JWS code on first request, which can itself take
-              # a couple seconds. Probe it as the final acceptance check
-              # and capture the response body so we can see the actual
-              # error message if the runtime guard fires.
-              #
-              # Retry up to 3 times: build #1488 returned 500 on the very
-              # first request to the auth route (cold-compile race), then
-              # never recovered because the failed module stayed cached.
-              # Re-probing after a short sleep lets the Next.js worker
-              # re-evaluate the route module on the next request.
-              STATUS=000
-              for ATTEMPT in 1 2 3; do
-                STATUS=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 10 \
-                  "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
-                if [ "$STATUS" = "200" ]; then
-                  echo "OK: /api/auth/providers returned HTTP 200 (attempt $ATTEMPT)."
-                  break
-                fi
-                echo "WARN: /api/auth/providers returned HTTP $STATUS on attempt $ATTEMPT, retrying..." >&2
-                sleep 3
-              done
-              if [ "$STATUS" != "200" ]; then
-                echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200) after 3 attempts." >&2
+                echo "ERROR: /api/auth/providers did not return 200 within 60s (last health=$HEALTH, providers=$PROVIDER)." >&2
                 echo "--- response body (first 4KB) ---" >&2
                 head -c 4096 "$PROVIDER_RESP" >&2 || true
                 echo >&2
