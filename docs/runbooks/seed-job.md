@@ -9,7 +9,7 @@ The seed job creates or updates Jenkins jobs from DSL templates in `jobs/templat
 - Job DSL plugin installed.
 - Repository accessible from Jenkins.
 - Seed job credentials configured.
-- Seed job runs Job DSL in sandbox mode.
+- Seed job runs Job DSL without sandboxing in this environment because Jenkins requires an explicit execution user for sandboxed DSL.
 
 ## Execute
 
