@@ -11,9 +11,7 @@ pipeline {
     stage('Approve Pending Signatures') {
       steps {
         script {
-          import org.jenkinsci.plugins.scriptsecurity.scripts.ScriptApproval
-
-          def scriptApproval = ScriptApproval.get()
+          def scriptApproval = org.jenkinsci.plugins.scriptsecurity.scripts.ScriptApproval.get()
           def pendingSignatures = scriptApproval.getPendingSignatures()
 
           if (pendingSignatures) {
