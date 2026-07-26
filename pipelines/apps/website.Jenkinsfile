@@ -10,7 +10,6 @@ pipeline {
 
   parameters {
     booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Run pipeline even if main has no new commit.')
-    booleanParam(name: 'RUN_CD', defaultValue: false, description: 'Run deployment stages after CI passes.')
   }
 
   environment {
@@ -92,99 +91,24 @@ pipeline {
 
     stage('Deploy') {
       when {
-        allOf {
-          expression { env.SKIP_PIPELINE != 'true' }
-          expression { params.RUN_CD == true }
-        }
+        expression { env.SKIP_PIPELINE != 'true' }
       }
       steps {
         dir('website') {
-          catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE', message: 'Deploy skipped: required credentials are not configured in Jenkins.') {
-            withCredentials([
-              string(credentialsId: 'gcp_project_id', variable: 'PROJECT_ID'),
-              string(credentialsId: 'gcp_sa_key', variable: 'GCP_SA_KEY_JSON'),
-              string(credentialsId: 'home_upstream_host', variable: 'HOME_UPSTREAM_HOST'),
-              string(credentialsId: 'home_upstream_port', variable: 'HOME_UPSTREAM_PORT'),
-              usernamePassword(credentialsId: 'docker_token', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
-            ]) {
-              sh '''#!/usr/bin/env bash
-                set -eux
-                [ -n "$PROJECT_ID" ] && [ -n "$HOME_UPSTREAM_HOST" ] && [ -n "$HOME_UPSTREAM_PORT" ] && [ -n "$GCP_SA_KEY_JSON" ]
-                [[ "$HOME_UPSTREAM_PORT" =~ ^[0-9]+$ ]] || { echo "HOME_UPSTREAM_PORT is not numeric: '$HOME_UPSTREAM_PORT'" >&2; exit 1; }
+          sh '''#!/usr/bin/env bash
+            set -eux
 
-                IMAGE_TAG="${EDGE_IMAGE_REPO}:$(git rev-parse --short=8 HEAD)"
-                printf '%s' "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                docker buildx build --platform linux/amd64 --push -f Dockerfile.edge -t "$IMAGE_TAG" -t "${EDGE_IMAGE_REPO}:latest" .
-                docker logout
+            IMAGE_NAME="website-local"
+            CONTAINER_NAME="website-web"
+            HOST_PORT="8080"
 
-                sed \
-                  -e "s|__SERVICE_NAME__|${SERVICE_NAME}|g" \
-                  -e "s|__EDGE_IMAGE__|${IMAGE_TAG}|g" \
-                  -e "s|__HOME_UPSTREAM_HOST__|${HOME_UPSTREAM_HOST}|g" \
-                  -e "s|__HOME_UPSTREAM_PORT__|${HOME_UPSTREAM_PORT}|g" \
-                  -e "s|__RELAY_LISTEN_PORT__|18080|g" \
-                  -e "s|__TS_ADVERTISE_TAGS__|tag:cloud-run-edge|g" \
-                  -e "s|__TS_AUTHKEY_SECRET__|TS_AUTHKEY|g" \
-                  deploy/cloudrun/service.yaml > cloudrun-service.rendered.yaml
+            docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+            docker image rm -f "$IMAGE_NAME" >/dev/null 2>&1 || true
 
-                ! grep -qE "__[A-Z0-9_]+__" cloudrun-service.rendered.yaml
-                cat cloudrun-service.rendered.yaml > /tmp/rendered-manifest.yaml
-              '''
-
-              // Write the sidecar script via writeFile (Groovy handles the
-              // quoting cleanly). The script consumes the SA JSON from stdin
-              // (piped in from the next `sh`) and the rendered manifest from
-              // the file we just wrote, then prints the Cloud Run URL to
-              // stdout. We then read the URL from service_url.txt in a
-              // separate `sh` and curl the health endpoint.
-              writeFile file: '/tmp/deploy-sidecar.sh', text: '''set -eux
-mkdir -p /workspace
-cat > /tmp/gcp-sa.json
-cp /workspace/rendered-manifest.yaml /tmp/manifest.yaml
-gcloud --quiet auth activate-service-account --key-file=/tmp/gcp-sa.json
-gcloud --quiet config set project "$PROJECT_ID"
-# `gcloud run services replace` works for both creating and updating Cloud Run
-# services, so we don't need a separate `create` step. Use --quiet to skip
-# confirmations.
-gcloud --quiet run services replace /tmp/manifest.yaml --region "$RUN_REGION" --platform managed
-gcloud --quiet run services add-iam-policy-binding "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --member="allUsers" --role="roles/run.invoker"
-gcloud run services describe "$SERVICE_NAME" --region "$RUN_REGION" --project "$PROJECT_ID" --format="value(status.url)"
-'''
-              sh 'chmod +x /tmp/deploy-sidecar.sh && SIDECAR_B64=$(base64 -i /tmp/deploy-sidecar.sh | tr -d "\\n") && printf "%s" "$SIDECAR_B64" > /tmp/sidecar.b64'
-
-              // Pass the sidecar script as a base64 env var so we don't have
-              // to bind-mount it (the cloud-sdk slim image already has /tmp
-              // and /run populated with directories that collide with our
-              // bind mounts). The base64 value is in /tmp/sidecar.b64.
-              sh '''#!/usr/bin/env bash
-                set -eux
-                SIDECAR_B64="$(cat /tmp/sidecar.b64)"
-                printf '%s' "$GCP_SA_KEY_JSON" | docker run --rm -i \
-                  -e PROJECT_ID -e RUN_REGION -e SERVICE_NAME \
-                  -e SIDECAR_B64 \
-                  -v /tmp/rendered-manifest.yaml:/workspace/rendered-manifest.yaml:ro \
-                  gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
-                  sh -c 'echo "$SIDECAR_B64" | base64 -d > /workspace/deploy.sh && bash /workspace/deploy.sh' \
-                  > service_url.txt 2>service_url.err || echo "docker run exit code: $?"
-                if [ -s service_url.err ]; then
-                  echo "Docker run stderr:"
-                  cat service_url.err
-                fi
-              '''
-              sh '''#!/usr/bin/env bash
-                set -eux
-                SERVICE_URL="$(cat service_url.txt)"
-                curl -fsSL "${SERVICE_URL}/healthz" || curl -fsSL "${SERVICE_URL}/" || true
-              '''
-            }
-          }
-        }
-      }
-      post {
-        always {
-          dir('website') {
-            sh 'rm -f gcp-sa.json service_url.txt cloudrun-service.rendered.yaml'
-          }
+            docker build -t "$IMAGE_NAME" .
+            docker run -d --name "$CONTAINER_NAME" -p "${HOST_PORT}:80" "$IMAGE_NAME"
+            docker ps --filter "name=^/${CONTAINER_NAME}$"
+          '''
         }
       }
     }
