@@ -212,10 +212,25 @@ pipeline {
               # a couple seconds. Probe it as the final acceptance check
               # and capture the response body so we can see the actual
               # error message if the runtime guard fires.
-              STATUS=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 10 \
-                "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
+              #
+              # Retry up to 3 times: build #1488 returned 500 on the very
+              # first request to the auth route (cold-compile race), then
+              # never recovered because the failed module stayed cached.
+              # Re-probing after a short sleep lets the Next.js worker
+              # re-evaluate the route module on the next request.
+              STATUS=000
+              for ATTEMPT in 1 2 3; do
+                STATUS=$(curl -sS -o "$PROVIDER_RESP" -w '%{http_code}' --max-time 10 \
+                  "http://localhost:${HOST_PORT}/api/auth/providers" || echo 000)
+                if [ "$STATUS" = "200" ]; then
+                  echo "OK: /api/auth/providers returned HTTP 200 (attempt $ATTEMPT)."
+                  break
+                fi
+                echo "WARN: /api/auth/providers returned HTTP $STATUS on attempt $ATTEMPT, retrying..." >&2
+                sleep 3
+              done
               if [ "$STATUS" != "200" ]; then
-                echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200)." >&2
+                echo "ERROR: /api/auth/providers returned HTTP $STATUS (expected 200) after 3 attempts." >&2
                 echo "--- response body (first 4KB) ---" >&2
                 head -c 4096 "$PROVIDER_RESP" >&2 || true
                 echo >&2
@@ -225,7 +240,6 @@ pipeline {
                 exit 1
               fi
               rm -f "$PROVIDER_RESP"
-              echo "OK: /api/auth/providers returned HTTP 200."
             '''
           }
         }
